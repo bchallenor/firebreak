@@ -1,0 +1,6 @@
+[package]
+name = "firebreak"
+version = "0.1.0"
+authors = ["Ben Challenor <ben@challenor.org>"]
+edition = "2018"
+license = "MIT"
