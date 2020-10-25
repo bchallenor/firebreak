@@ -4,3 +4,10 @@ version = "0.1.0"
 authors = ["Ben Challenor <ben@challenor.org>"]
 edition = "2018"
 license = "MIT"
+
+[dependencies]
+crossbeam-utils = "0.7"
+env_logger = "0.7"
+lazy_static = "1"
+libc = "0.2"
+log = "0.4"
