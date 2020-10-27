@@ -65,6 +65,10 @@ impl Host for OsHost {
         self.ns.load_nft_rules(rules)
     }
 
+    fn list_nft_rules(&self) -> Result<String, io::Error> {
+        self.ns.list_nft_rules()
+    }
+
     fn input_path<'a>(
         interface: &'a mut Self::Interface,
         host: &'a Self,
@@ -215,6 +219,11 @@ impl OsNs {
         self.scoped_process_with_input("nft", &["-f", "-"], rules)?;
         Ok(())
     }
+
+    fn list_nft_rules(&self) -> Result<String, io::Error> {
+        let ret = self.scoped_process("nft", &["list", "ruleset"])?;
+        Ok(ret)
+    }
 }
 
 #[cfg(test)]
@@ -245,6 +254,7 @@ mod tests {
         table inet filter {
             chain input {
                 type filter hook input priority filter; policy accept;
+                counter
             }
         }
     "#};
@@ -253,6 +263,7 @@ mod tests {
         table inet filter {
             chain input {
                 type filter hook input priority filter; policy drop;
+                counter
             }
         }
     "#};
@@ -278,6 +289,7 @@ mod tests {
 
         let conn_result = path.connect(spec).await?;
 
+        debug!("Firewall state:\n{}", router.list_nft_rules()?);
         assert_eq!(expected_conn_result, conn_result);
 
         Ok(())

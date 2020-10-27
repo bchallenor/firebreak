@@ -22,6 +22,7 @@ pub trait Host: Sized {
     ) -> Result<Self::Interface, io::Error>;
 
     fn load_nft_rules<R: io::Read + Send>(&mut self, rules: R) -> Result<(), io::Error>;
+    fn list_nft_rules(&self) -> Result<String, io::Error>;
 
     fn input_path<'a>(
         interface: &'a mut Self::Interface,
