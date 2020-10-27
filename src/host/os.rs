@@ -223,6 +223,7 @@ mod tests {
 
     use indoc::indoc;
     use lazy_static::lazy_static;
+    use paste::paste;
 
     use crate::conn::{ConnResult, ConnSpec};
     use crate::INIT;
@@ -232,7 +233,15 @@ mod tests {
         static ref IPV6_ADDR_WITH_NET: Ipv6Net = "2001:db8::1/64".parse().unwrap();
     }
 
-    const ACCEPT_INPUT: &'static str = indoc! {r#"
+    const TCP_SPEC: ConnSpec = ConnSpec::Tcp { port: 80 };
+    const UDP_SPEC: ConnSpec = ConnSpec::Udp { port: 53 };
+
+    const EMPTY_INPUT_RULES: &'static str = indoc! {r#"
+        table inet filter {
+        }
+    "#};
+
+    const ACCEPT_INPUT_RULES: &'static str = indoc! {r#"
         table inet filter {
             chain input {
                 type filter hook input priority filter; policy accept;
@@ -240,7 +249,7 @@ mod tests {
         }
     "#};
 
-    const DROP_INPUT: &'static str = indoc! {r#"
+    const DROP_INPUT_RULES: &'static str = indoc! {r#"
         table inet filter {
             chain input {
                 type filter hook input priority filter; policy drop;
@@ -248,50 +257,76 @@ mod tests {
         }
     "#};
 
-    // TODO: test output/forward as well as input
-    #[tokio::test]
-    async fn test_input() -> Result<(), io::Error> {
+    async fn test_input<F>(
+        addr_with_net: IpNet,
+        spec: ConnSpec,
+        rules: &str,
+        expectation: F,
+    ) -> Result<(), io::Error>
+    where
+        F: Fn(&dyn ConnPath) -> ConnResult,
+    {
         *INIT;
-        for &ip in &[
-            IpNet::from(*IPV4_ADDR_WITH_NET),
-            IpNet::from(*IPV6_ADDR_WITH_NET),
-        ] {
-            for &spec in &[ConnSpec::Tcp { port: 80 }, ConnSpec::Udp { port: 53 }] {
-                let mut router = OsHost::new("router".into())?;
-                let mut wan = router.new_interface("wan".into(), ip)?;
 
-                {
-                    info!("Testing firewall: none");
-                    let path = OsHost::input_path(&mut wan, &router)?;
-                    assert_eq!(
-                        ConnResult::Ok {
-                            source_addr: path.source_addr()
-                        },
-                        path.connect(spec).await?
-                    );
-                }
+        let mut router = OsHost::new("router".into())?;
+        let mut wan = router.new_interface("wan".into(), addr_with_net)?;
 
-                {
-                    info!("Testing firewall: accept");
-                    router.load_nft_rules(ACCEPT_INPUT.as_bytes())?;
-                    let path = OsHost::input_path(&mut wan, &router)?;
-                    assert_eq!(
-                        ConnResult::Ok {
-                            source_addr: path.source_addr()
-                        },
-                        path.connect(spec).await?
-                    );
-                }
+        router.load_nft_rules(rules.as_bytes())?;
 
-                {
-                    // TODO: test reject as well as drop
-                    info!("Testing firewall: drop");
-                    router.load_nft_rules(DROP_INPUT.as_bytes())?;
-                    let path = OsHost::input_path(&mut wan, &router)?;
-                    assert_eq!(ConnResult::Unreachable, path.connect(spec).await?);
-                }
-            }
-        }
+        let path = OsHost::input_path(&mut wan, &router)?;
+        let expected_conn_result = expectation(&*path);
+
+        let conn_result = path.connect(spec).await?;
+
+        assert_eq!(expected_conn_result, conn_result);
+
         Ok(())
     }
+
+    fn expect_empty(path: &dyn ConnPath) -> ConnResult {
+        ConnResult::Ok {
+            source_addr: path.source_addr(),
+        }
+    }
+
+    fn expect_accept(path: &dyn ConnPath) -> ConnResult {
+        ConnResult::Ok {
+            source_addr: path.source_addr(),
+        }
+    }
+
+    fn expect_drop(_path: &dyn ConnPath) -> ConnResult {
+        ConnResult::Unreachable
+    }
+
+    macro_rules! gen_test {
+        ($direction:ident, $firewall:ident, $layer4:ident, $layer3:ident) => {
+            paste! {
+                #[tokio::test]
+                async fn [< test_ $firewall _firewall _with_ $layer4 _over_ $layer3 _ $direction >]() -> Result<(), io::Error> {
+                    [< test_ $direction >](
+                        IpNet::from(*[< $layer3:snake:upper _ADDR_WITH_NET >]),
+                        [< $layer4:snake:upper _SPEC >],
+                        [< $firewall:snake:upper _ $direction:snake:upper _RULES >],
+                        [< expect_ $firewall >]
+                    ).await
+                }
+            }
+        };
+    }
+
+    // TODO: test output/forward as well as input
+    // TODO: test reject as well as drop
+    gen_test!(input, empty, tcp, ipv4);
+    gen_test!(input, empty, tcp, ipv6);
+    gen_test!(input, empty, udp, ipv4);
+    gen_test!(input, empty, udp, ipv6);
+    gen_test!(input, accept, tcp, ipv4);
+    gen_test!(input, accept, tcp, ipv6);
+    gen_test!(input, accept, udp, ipv4);
+    gen_test!(input, accept, udp, ipv6);
+    gen_test!(input, drop, tcp, ipv4);
+    gen_test!(input, drop, tcp, ipv6);
+    gen_test!(input, drop, udp, ipv4);
+    gen_test!(input, drop, udp, ipv6);
 }
