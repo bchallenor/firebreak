@@ -6,6 +6,7 @@ use std::io;
 use crate::os::OsNs;
 
 mod conn;
+mod host;
 mod os;
 
 lazy_static! {
