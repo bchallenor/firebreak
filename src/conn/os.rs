@@ -273,7 +273,13 @@ impl OsNsConnector for Udp {
         socket.connect((target_addr, self.port)).await?;
         debug!("Connected");
         let cookie: u128 = rand::random();
-        socket.send(&cookie.to_be_bytes()).await?;
+        match socket.send(&cookie.to_be_bytes()).await {
+            Err(err) if err.raw_os_error() == Some(libc::EPERM) => {
+                debug!("Refused locally");
+                return Ok(ClientStatus::Refused);
+            }
+            other => other?,
+        };
         debug!("Sent cookie: {:?}", cookie);
         match socket.take_error()? {
             None => Ok(ClientStatus::SentCookie(SentCookie { cookie })),
