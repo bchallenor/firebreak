@@ -283,10 +283,10 @@ mod tests {
         let path = OsHost::input_path(&mut wan, &router)?;
         let expected_conn_result = expect_result(&*path);
 
-        let conn_result = path.connect(spec).await?;
+        let conn_result = path.connect(spec).await;
 
         debug!("Firewall state:\n{}", router.list_nft_rules()?);
-        assert_eq!(expected_conn_result, conn_result);
+        assert_eq!(expected_conn_result, conn_result?);
 
         Ok(())
     }
