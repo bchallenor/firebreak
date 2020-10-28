@@ -275,7 +275,14 @@ impl OsNsConnector for Udp {
         let cookie: u128 = rand::random();
         socket.send(&cookie.to_be_bytes()).await?;
         debug!("Sent cookie: {:?}", cookie);
-        Ok(ClientStatus::SentCookie(SentCookie { cookie }))
+        match socket.take_error()? {
+            None => Ok(ClientStatus::SentCookie(SentCookie { cookie })),
+            Some(err) if err.raw_os_error() == Some(libc::ECONNREFUSED) => {
+                debug!("Refused");
+                Ok(ClientStatus::Refused)
+            }
+            Some(err) => Err(err),
+        }
     }
 }
 
