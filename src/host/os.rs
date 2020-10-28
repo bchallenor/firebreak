@@ -312,30 +312,30 @@ mod tests {
         }
     }
 
-    fn expect_accept(path: &dyn ConnPath) -> ConnEffect {
+    fn expect_ok(path: &dyn ConnPath) -> ConnEffect {
         ConnEffect::Ok {
             source_addr: path.source_addr(),
         }
     }
 
-    fn expect_drop(_path: &dyn ConnPath) -> ConnEffect {
+    fn expect_unreachable(_path: &dyn ConnPath) -> ConnEffect {
         ConnEffect::Unreachable
     }
 
-    fn expect_reject(_path: &dyn ConnPath) -> ConnEffect {
+    fn expect_refused(_path: &dyn ConnPath) -> ConnEffect {
         ConnEffect::Refused
     }
 
     macro_rules! gen_test {
-        ($direction:ident, $firewall:ident, $layer4:ident, $layer3:ident) => {
+        ($direction:ident, $action:ident, $effect:ident, $layer4:ident, $layer3:ident) => {
             paste! {
                 #[tokio::test]
-                async fn [< test_ $firewall _firewall _with_ $layer4 _over_ $layer3 _ $direction >]() -> Result<(), io::Error> {
+                async fn [< test_ $action _firewall _with_ $layer4 _over_ $layer3 _ $direction >]() -> Result<(), io::Error> {
                     [< test_ $direction >](
                         &[< $layer3:snake:upper _ADDRS_WITH_NET >],
                         [< $layer4:snake:upper _SPEC >],
-                        [< build_ $firewall >],
-                        [< expect_ $firewall >]
+                        [< build_ $action >],
+                        [< expect_ $effect >]
                     ).await
                 }
             }
@@ -343,16 +343,16 @@ mod tests {
     }
 
     // TODO: test output/forward as well as input
-    gen_test!(input, accept, tcp, ipv4);
-    gen_test!(input, accept, tcp, ipv6);
-    gen_test!(input, accept, udp, ipv4);
-    gen_test!(input, accept, udp, ipv6);
-    gen_test!(input, drop, tcp, ipv4);
-    gen_test!(input, drop, tcp, ipv6);
-    gen_test!(input, drop, udp, ipv4);
-    gen_test!(input, drop, udp, ipv6);
-    gen_test!(input, reject, tcp, ipv4);
-    gen_test!(input, reject, tcp, ipv6);
-    gen_test!(input, reject, udp, ipv4);
-    gen_test!(input, reject, udp, ipv6);
+    gen_test!(input, accept, ok, tcp, ipv4);
+    gen_test!(input, accept, ok, tcp, ipv6);
+    gen_test!(input, accept, ok, udp, ipv4);
+    gen_test!(input, accept, ok, udp, ipv6);
+    gen_test!(input, drop, unreachable, tcp, ipv4);
+    gen_test!(input, drop, unreachable, tcp, ipv6);
+    gen_test!(input, drop, unreachable, udp, ipv4);
+    gen_test!(input, drop, unreachable, udp, ipv6);
+    gen_test!(input, reject, refused, tcp, ipv4);
+    gen_test!(input, reject, refused, tcp, ipv6);
+    gen_test!(input, reject, refused, udp, ipv4);
+    gen_test!(input, reject, refused, udp, ipv6);
 }
