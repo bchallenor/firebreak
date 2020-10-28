@@ -62,21 +62,21 @@ impl<'a> ConnPath for OsNsConnPath<'a> {
         self.target_addr
     }
 
-    async fn connect(&self, spec: ConnSpec) -> Result<ConnResult, io::Error> {
+    async fn connect(&self, spec: ConnSpec) -> Result<ConnEffect, io::Error> {
         info!(
             "Attempting to connect from {} ({}) to {} ({}) via {:?}",
             self.source_name, self.source_addr, self.target_name, self.target_addr, spec
         );
         let timeout = Duration::from_secs(2);
-        let result = match spec {
+        let effect = match spec {
             ConnSpec::Tcp { port } => Tcp { port }.connect_with_timeout(&self, timeout).await,
             ConnSpec::Udp { port } => Udp { port }.connect_with_timeout(&self, timeout).await,
         }?;
         info!(
-            "Attempt to connect from {} ({}) to {} ({}) via {:?} resulted in: {:?}",
-            self.source_name, self.source_addr, self.target_name, self.target_addr, spec, result,
+            "Attempt to connect from {} ({}) to {} ({}) via {:?} had effect: {:?}",
+            self.source_name, self.source_addr, self.target_name, self.target_addr, spec, effect,
         );
-        Ok(result)
+        Ok(effect)
     }
 }
 
@@ -126,13 +126,13 @@ trait OsNsConnector: Sized + Sync {
         &self,
         path: &OsNsConnPath<'a>,
         duration: Duration,
-    ) -> Result<ConnResult, io::Error> {
+    ) -> Result<ConnEffect, io::Error> {
         timeout(duration, self.connect(path))
-            .unwrap_or_else(|Elapsed { .. }| Ok(ConnResult::Unreachable))
+            .unwrap_or_else(|Elapsed { .. }| Ok(ConnEffect::Unreachable))
             .await
     }
 
-    async fn connect<'a>(&self, path: &OsNsConnPath<'a>) -> Result<ConnResult, io::Error> {
+    async fn connect<'a>(&self, path: &OsNsConnPath<'a>) -> Result<ConnEffect, io::Error> {
         // Ensure the server is bound, with any errors handled, before we start the client
         debug!("Binding server...");
         let listener = self.bind_server(path.target, path.target_addr).await?;
@@ -159,11 +159,11 @@ trait OsNsConnector: Sized + Sync {
         match try_join!(client, server)? {
             (ClientStatus::SentCookie(tx), ServerStatus::ReceivedCookie(rx)) => {
                 assert_eq!(rx.cookie, tx.cookie);
-                Ok(ConnResult::Ok {
+                Ok(ConnEffect::Ok {
                     source_addr: rx.peer_addr,
                 })
             }
-            (ClientStatus::Refused, ServerStatus::Aborted) => Ok(ConnResult::Refused),
+            (ClientStatus::Refused, ServerStatus::Aborted) => Ok(ConnEffect::Refused),
             other => unreachable!("Invalid state: {:?}", other),
         }
     }
@@ -328,12 +328,12 @@ mod tests {
     #[tokio::test]
     async fn tcp_v4_ok() -> Result<(), io::Error> {
         let connector = Tcp { port: 1 };
-        let result = connector.connect(&IPV4_LOCALHOST_CONN_PATH).await?;
+        let effect = connector.connect(&IPV4_LOCALHOST_CONN_PATH).await?;
         assert_eq!(
-            ConnResult::Ok {
+            ConnEffect::Ok {
                 source_addr: IpAddr::V4(Ipv4Addr::LOCALHOST)
             },
-            result
+            effect
         );
         Ok(())
     }
@@ -341,12 +341,12 @@ mod tests {
     #[tokio::test]
     async fn tcp_v6_ok() -> Result<(), io::Error> {
         let connector = Tcp { port: 1 };
-        let result = connector.connect(&IPV6_LOCALHOST_CONN_PATH).await?;
+        let effect = connector.connect(&IPV6_LOCALHOST_CONN_PATH).await?;
         assert_eq!(
-            ConnResult::Ok {
+            ConnEffect::Ok {
                 source_addr: IpAddr::V6(Ipv6Addr::LOCALHOST)
             },
-            result
+            effect
         );
         Ok(())
     }
@@ -354,12 +354,12 @@ mod tests {
     #[tokio::test]
     async fn udp_v4_ok() -> Result<(), io::Error> {
         let connector = Udp { port: 1 };
-        let result = connector.connect(&IPV4_LOCALHOST_CONN_PATH).await?;
+        let effect = connector.connect(&IPV4_LOCALHOST_CONN_PATH).await?;
         assert_eq!(
-            ConnResult::Ok {
+            ConnEffect::Ok {
                 source_addr: IpAddr::V4(Ipv4Addr::LOCALHOST)
             },
-            result
+            effect
         );
         Ok(())
     }
@@ -367,12 +367,12 @@ mod tests {
     #[tokio::test]
     async fn udp_v6_ok() -> Result<(), io::Error> {
         let connector = Udp { port: 1 };
-        let result = connector.connect(&IPV6_LOCALHOST_CONN_PATH).await?;
+        let effect = connector.connect(&IPV6_LOCALHOST_CONN_PATH).await?;
         assert_eq!(
-            ConnResult::Ok {
+            ConnEffect::Ok {
                 source_addr: IpAddr::V6(Ipv6Addr::LOCALHOST)
             },
-            result
+            effect
         );
         Ok(())
     }

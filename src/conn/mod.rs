@@ -13,7 +13,7 @@ pub trait ConnPath: Sync {
     fn target_name(&self) -> &str;
     fn target_addr(&self) -> IpAddr;
 
-    async fn connect(&self, spec: ConnSpec) -> Result<ConnResult, io::Error>;
+    async fn connect(&self, spec: ConnSpec) -> Result<ConnEffect, io::Error>;
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -23,7 +23,7 @@ pub enum ConnSpec {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum ConnResult {
+pub enum ConnEffect {
     Ok { source_addr: IpAddr },
     Refused,
     Unreachable,

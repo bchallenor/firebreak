@@ -234,7 +234,7 @@ mod tests {
     use lazy_static::lazy_static;
     use paste::paste;
 
-    use crate::conn::{ConnResult, ConnSpec};
+    use crate::conn::{ConnEffect, ConnSpec};
     use crate::INIT;
 
     lazy_static! {
@@ -255,11 +255,11 @@ mod tests {
         addrs_with_net: &[IpNet],
         spec: ConnSpec,
         build_rule: BF,
-        expect_result: EF,
+        expect_effect: EF,
     ) -> Result<(), io::Error>
     where
         BF: Fn(ConnSpec) -> String,
-        EF: Fn(&dyn ConnPath) -> ConnResult,
+        EF: Fn(&dyn ConnPath) -> ConnEffect,
     {
         *INIT;
 
@@ -281,12 +281,12 @@ mod tests {
         router.load_nft_rules(rules.as_bytes())?;
 
         let path = OsHost::input_path(&mut wan, &router)?;
-        let expected_conn_result = expect_result(&*path);
+        let expected_conn_effect = expect_effect(&*path);
 
-        let conn_result = path.connect(spec).await;
+        let conn_effect = path.connect(spec).await;
 
         debug!("Firewall state:\n{}", router.list_nft_rules()?);
-        assert_eq!(expected_conn_result, conn_result?);
+        assert_eq!(expected_conn_effect, conn_effect?);
 
         Ok(())
     }
@@ -312,18 +312,18 @@ mod tests {
         }
     }
 
-    fn expect_accept(path: &dyn ConnPath) -> ConnResult {
-        ConnResult::Ok {
+    fn expect_accept(path: &dyn ConnPath) -> ConnEffect {
+        ConnEffect::Ok {
             source_addr: path.source_addr(),
         }
     }
 
-    fn expect_drop(_path: &dyn ConnPath) -> ConnResult {
-        ConnResult::Unreachable
+    fn expect_drop(_path: &dyn ConnPath) -> ConnEffect {
+        ConnEffect::Unreachable
     }
 
-    fn expect_reject(_path: &dyn ConnPath) -> ConnResult {
-        ConnResult::Refused
+    fn expect_reject(_path: &dyn ConnPath) -> ConnEffect {
+        ConnEffect::Refused
     }
 
     macro_rules! gen_test {
