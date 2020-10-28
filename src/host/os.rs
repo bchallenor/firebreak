@@ -238,15 +238,21 @@ mod tests {
     use crate::INIT;
 
     lazy_static! {
-        static ref IPV4_ADDR_WITH_NET: Ipv4Net = "203.0.113.1/24".parse().unwrap();
-        static ref IPV6_ADDR_WITH_NET: Ipv6Net = "2001:db8::1/64".parse().unwrap();
+        static ref IPV4_ADDRS_WITH_NET: Vec<IpNet> = vec![
+            "198.51.100.1/24".parse().unwrap(),
+            "203.0.113.1/24".parse().unwrap(),
+        ];
+        static ref IPV6_ADDRS_WITH_NET: Vec<IpNet> = vec![
+            "2001:db8:1111:1111::1/64".parse().unwrap(),
+            "2001:db8:2222:2222::1/64".parse().unwrap(),
+        ];
     }
 
     const TCP_SPEC: ConnSpec = ConnSpec::Tcp { port: 80 };
     const UDP_SPEC: ConnSpec = ConnSpec::Udp { port: 53 };
 
     async fn test_input<BF, EF>(
-        addr_with_net: IpNet,
+        addrs_with_net: &[IpNet],
         spec: ConnSpec,
         build_rule: BF,
         expect_result: EF,
@@ -258,7 +264,7 @@ mod tests {
         *INIT;
 
         let mut router = OsHost::new("router".into())?;
-        let mut wan = router.new_interface("wan".into(), addr_with_net)?;
+        let mut wan = router.new_interface("wan".into(), addrs_with_net[0])?;
 
         let rules = formatdoc! {
             r#"
@@ -326,7 +332,7 @@ mod tests {
                 #[tokio::test]
                 async fn [< test_ $firewall _firewall _with_ $layer4 _over_ $layer3 _ $direction >]() -> Result<(), io::Error> {
                     [< test_ $direction >](
-                        IpNet::from(*[< $layer3:snake:upper _ADDR_WITH_NET >]),
+                        &[< $layer3:snake:upper _ADDRS_WITH_NET >],
                         [< $layer4:snake:upper _SPEC >],
                         [< build_ $firewall >],
                         [< expect_ $firewall >]
