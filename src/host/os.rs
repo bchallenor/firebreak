@@ -230,7 +230,7 @@ impl OsNs {
 mod tests {
     use super::*;
 
-    use indoc::indoc;
+    use indoc::formatdoc;
     use lazy_static::lazy_static;
     use paste::paste;
 
@@ -245,47 +245,37 @@ mod tests {
     const TCP_SPEC: ConnSpec = ConnSpec::Tcp { port: 80 };
     const UDP_SPEC: ConnSpec = ConnSpec::Udp { port: 53 };
 
-    const EMPTY_INPUT_RULES: &'static str = indoc! {r#"
-        table inet filter {
-        }
-    "#};
-
-    const ACCEPT_INPUT_RULES: &'static str = indoc! {r#"
-        table inet filter {
-            chain input {
-                type filter hook input priority filter; policy accept;
-                counter
-            }
-        }
-    "#};
-
-    const DROP_INPUT_RULES: &'static str = indoc! {r#"
-        table inet filter {
-            chain input {
-                type filter hook input priority filter; policy drop;
-                counter
-            }
-        }
-    "#};
-
-    async fn test_input<F>(
+    async fn test_input<BF, EF>(
         addr_with_net: IpNet,
         spec: ConnSpec,
-        rules: &str,
-        expectation: F,
+        build_rule: BF,
+        expect_result: EF,
     ) -> Result<(), io::Error>
     where
-        F: Fn(&dyn ConnPath) -> ConnResult,
+        BF: Fn(ConnSpec) -> String,
+        EF: Fn(&dyn ConnPath) -> ConnResult,
     {
         *INIT;
 
         let mut router = OsHost::new("router".into())?;
         let mut wan = router.new_interface("wan".into(), addr_with_net)?;
 
+        let rules = formatdoc! {
+            r#"
+                table inet filter {{
+                    chain input {{
+                        type filter hook input priority filter;
+                        {rule}
+                        log prefix "Other packet: " counter accept
+                    }}
+                }}
+            "#,
+            rule = build_rule(spec)
+        };
         router.load_nft_rules(rules.as_bytes())?;
 
         let path = OsHost::input_path(&mut wan, &router)?;
-        let expected_conn_result = expectation(&*path);
+        let expected_conn_result = expect_result(&*path);
 
         let conn_result = path.connect(spec).await?;
 
@@ -295,9 +285,17 @@ mod tests {
         Ok(())
     }
 
-    fn expect_empty(path: &dyn ConnPath) -> ConnResult {
-        ConnResult::Ok {
-            source_addr: path.source_addr(),
+    fn build_accept(spec: ConnSpec) -> String {
+        match spec {
+            ConnSpec::Tcp { port } => format!("tcp dport {} counter accept", port),
+            ConnSpec::Udp { port } => format!("udp dport {} counter accept", port),
+        }
+    }
+
+    fn build_drop(spec: ConnSpec) -> String {
+        match spec {
+            ConnSpec::Tcp { port } => format!("tcp dport {} counter drop", port),
+            ConnSpec::Udp { port } => format!("udp dport {} counter drop", port),
         }
     }
 
@@ -319,7 +317,7 @@ mod tests {
                     [< test_ $direction >](
                         IpNet::from(*[< $layer3:snake:upper _ADDR_WITH_NET >]),
                         [< $layer4:snake:upper _SPEC >],
-                        [< $firewall:snake:upper _ $direction:snake:upper _RULES >],
+                        [< build_ $firewall >],
                         [< expect_ $firewall >]
                     ).await
                 }
@@ -329,10 +327,6 @@ mod tests {
 
     // TODO: test output/forward as well as input
     // TODO: test reject as well as drop
-    gen_test!(input, empty, tcp, ipv4);
-    gen_test!(input, empty, tcp, ipv6);
-    gen_test!(input, empty, udp, ipv4);
-    gen_test!(input, empty, udp, ipv6);
     gen_test!(input, accept, tcp, ipv4);
     gen_test!(input, accept, tcp, ipv6);
     gen_test!(input, accept, udp, ipv4);
