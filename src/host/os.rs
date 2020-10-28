@@ -370,7 +370,7 @@ mod tests {
         ($direction:ident, $action:ident, $effect:ident, $layer4:ident, $layer3:ident) => {
             paste! {
                 #[tokio::test]
-                async fn [< test_ $action _firewall _with_ $layer4 _over_ $layer3 _ $direction >]() -> Result<(), io::Error> {
+                async fn [< test_ $action _ $direction _firewall _with_ $layer4 _over_ $layer3 >]() -> Result<(), io::Error> {
                     [< test_ $direction >](
                         &[< $layer3:snake:upper _ADDRS_WITH_NET >],
                         [< $layer4:snake:upper _SPEC >],
