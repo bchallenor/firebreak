@@ -344,6 +344,47 @@ mod tests {
         Ok(())
     }
 
+    async fn test_forward<BF, EF>(
+        addrs_with_net: &[IpNet],
+        spec: ConnSpec,
+        build_rule: BF,
+        expect_effect: EF,
+    ) -> Result<(), io::Error>
+    where
+        BF: Fn(ConnSpec) -> String,
+        EF: Fn(&dyn ConnPath) -> ConnEffect,
+    {
+        *INIT;
+
+        let mut router = OsHost::new("router".into())?;
+        let mut wan = router.new_interface("wan".into(), addrs_with_net[0])?;
+        let mut lan = router.new_interface("lan".into(), addrs_with_net[1])?;
+
+        let rules = formatdoc! {
+            r#"
+                table inet filter {{
+                    chain forward {{
+                        type filter hook forward priority filter;
+                        {rule}
+                        log prefix "Other packet: " counter accept
+                    }}
+                }}
+            "#,
+            rule = build_rule(spec)
+        };
+        router.load_nft_rules(rules.as_bytes())?;
+
+        let path = OsHost::forward_path(&mut wan, &mut lan)?;
+        let expected_conn_effect = expect_effect(&*path);
+
+        let conn_effect = path.connect(spec).await;
+
+        debug!("Firewall state:\n{}", router.list_nft_rules()?);
+        assert_eq!(expected_conn_effect, conn_effect?);
+
+        Ok(())
+    }
+
     fn build_accept(spec: ConnSpec) -> String {
         match spec {
             ConnSpec::Tcp { port } => format!("tcp dport {} counter accept", port),
@@ -395,8 +436,6 @@ mod tests {
         };
     }
 
-    // TODO: test forward as well as input/output
-
     gen_test!(input, accept, ok, tcp, ipv4);
     gen_test!(input, accept, ok, tcp, ipv6);
     gen_test!(input, accept, ok, udp, ipv4);
@@ -423,4 +462,17 @@ mod tests {
     gen_test!(output, reject, refused, tcp, ipv6);
     gen_test!(output, reject, refused, udp, ipv4);
     gen_test!(output, reject, refused, udp, ipv6);
+
+    gen_test!(forward, accept, ok, tcp, ipv4);
+    gen_test!(forward, accept, ok, tcp, ipv6);
+    gen_test!(forward, accept, ok, udp, ipv4);
+    gen_test!(forward, accept, ok, udp, ipv6);
+    gen_test!(forward, drop, unreachable, tcp, ipv4);
+    gen_test!(forward, drop, unreachable, tcp, ipv6);
+    gen_test!(forward, drop, unreachable, udp, ipv4);
+    gen_test!(forward, drop, unreachable, udp, ipv6);
+    gen_test!(forward, reject, refused, tcp, ipv4);
+    gen_test!(forward, reject, refused, tcp, ipv6);
+    gen_test!(forward, reject, refused, udp, ipv4);
+    gen_test!(forward, reject, refused, udp, ipv6);
 }
