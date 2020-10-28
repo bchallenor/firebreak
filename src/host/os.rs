@@ -299,6 +299,13 @@ mod tests {
         }
     }
 
+    fn build_reject(spec: ConnSpec) -> String {
+        match spec {
+            ConnSpec::Tcp { port } => format!("tcp dport {} counter reject with tcp reset", port),
+            ConnSpec::Udp { port } => format!("udp dport {} counter reject", port),
+        }
+    }
+
     fn expect_accept(path: &dyn ConnPath) -> ConnResult {
         ConnResult::Ok {
             source_addr: path.source_addr(),
@@ -307,6 +314,10 @@ mod tests {
 
     fn expect_drop(_path: &dyn ConnPath) -> ConnResult {
         ConnResult::Unreachable
+    }
+
+    fn expect_reject(_path: &dyn ConnPath) -> ConnResult {
+        ConnResult::Refused
     }
 
     macro_rules! gen_test {
@@ -326,7 +337,6 @@ mod tests {
     }
 
     // TODO: test output/forward as well as input
-    // TODO: test reject as well as drop
     gen_test!(input, accept, tcp, ipv4);
     gen_test!(input, accept, tcp, ipv6);
     gen_test!(input, accept, udp, ipv4);
@@ -335,4 +345,8 @@ mod tests {
     gen_test!(input, drop, tcp, ipv6);
     gen_test!(input, drop, udp, ipv4);
     gen_test!(input, drop, udp, ipv6);
+    gen_test!(input, reject, tcp, ipv4);
+    gen_test!(input, reject, tcp, ipv6);
+    gen_test!(input, reject, udp, ipv4);
+    gen_test!(input, reject, udp, ipv6);
 }
