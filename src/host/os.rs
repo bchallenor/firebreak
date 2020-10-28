@@ -291,6 +291,46 @@ mod tests {
         Ok(())
     }
 
+    async fn test_output<BF, EF>(
+        addrs_with_net: &[IpNet],
+        spec: ConnSpec,
+        build_rule: BF,
+        expect_effect: EF,
+    ) -> Result<(), io::Error>
+    where
+        BF: Fn(ConnSpec) -> String,
+        EF: Fn(&dyn ConnPath) -> ConnEffect,
+    {
+        *INIT;
+
+        let mut router = OsHost::new("router".into())?;
+        let mut wan = router.new_interface("wan".into(), addrs_with_net[0])?;
+
+        let rules = formatdoc! {
+            r#"
+                table inet filter {{
+                    chain output {{
+                        type filter hook output priority filter;
+                        {rule}
+                        log prefix "Other packet: " counter accept
+                    }}
+                }}
+            "#,
+            rule = build_rule(spec)
+        };
+        router.load_nft_rules(rules.as_bytes())?;
+
+        let path = OsHost::output_path(&router, &mut wan)?;
+        let expected_conn_effect = expect_effect(&*path);
+
+        let conn_effect = path.connect(spec).await;
+
+        debug!("Firewall state:\n{}", router.list_nft_rules()?);
+        assert_eq!(expected_conn_effect, conn_effect?);
+
+        Ok(())
+    }
+
     fn build_accept(spec: ConnSpec) -> String {
         match spec {
             ConnSpec::Tcp { port } => format!("tcp dport {} counter accept", port),
@@ -342,7 +382,8 @@ mod tests {
         };
     }
 
-    // TODO: test output/forward as well as input
+    // TODO: test forward as well as input/output
+
     gen_test!(input, accept, ok, tcp, ipv4);
     gen_test!(input, accept, ok, tcp, ipv6);
     gen_test!(input, accept, ok, udp, ipv4);
@@ -355,4 +396,18 @@ mod tests {
     gen_test!(input, reject, refused, tcp, ipv6);
     gen_test!(input, reject, refused, udp, ipv4);
     gen_test!(input, reject, refused, udp, ipv6);
+
+    // Note that on Linux, output drop has different effects for TCP and UDP
+    gen_test!(output, accept, ok, tcp, ipv4);
+    gen_test!(output, accept, ok, tcp, ipv6);
+    gen_test!(output, accept, ok, udp, ipv4);
+    gen_test!(output, accept, ok, udp, ipv6);
+    gen_test!(output, drop, unreachable, tcp, ipv4);
+    gen_test!(output, drop, unreachable, tcp, ipv6);
+    gen_test!(output, drop, refused, udp, ipv4);
+    gen_test!(output, drop, refused, udp, ipv6);
+    gen_test!(output, reject, refused, tcp, ipv4);
+    gen_test!(output, reject, refused, tcp, ipv6);
+    gen_test!(output, reject, refused, udp, ipv4);
+    gen_test!(output, reject, refused, udp, ipv6);
 }
