@@ -3,6 +3,7 @@ use std::prelude::v1::*;
 use ipnet::IpNet;
 use log::*;
 use std::ffi::OsStr;
+use std::fs;
 use std::io;
 
 use crate::conn::os::OsNsConnPath;
@@ -29,6 +30,8 @@ impl Host for OsHost {
     fn new(name: String) -> Result<Self, io::Error> {
         let mut ns = OsNs::new_net()?;
         ns.enable_link("lo")?;
+        ns.enable_ipv4_forwarding()?;
+        ns.enable_ipv6_forwarding()?;
         Ok(OsHost { name, ns })
     }
 
@@ -159,6 +162,16 @@ impl Interface for OsInterface {
 }
 
 impl OsNs {
+    fn enable_ipv4_forwarding(&mut self) -> Result<(), io::Error> {
+        self.scoped(|| fs::write("/proc/sys/net/ipv4/conf/all/forwarding", "1"))?;
+        Ok(())
+    }
+
+    fn enable_ipv6_forwarding(&mut self) -> Result<(), io::Error> {
+        self.scoped(|| fs::write("/proc/sys/net/ipv6/conf/all/forwarding", "1"))?;
+        Ok(())
+    }
+
     fn add_veth_link(&mut self, name: &str, peer_name: &str) -> Result<(), io::Error> {
         self.scoped_process(
             "ip",
