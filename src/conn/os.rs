@@ -67,7 +67,7 @@ impl<'a> ConnPath for OsNsConnPath<'a> {
             "Attempting to connect from {} ({}) to {} ({}) via {:?}",
             self.source_name, self.source_addr, self.target_name, self.target_addr, spec
         );
-        let timeout = Duration::from_secs(2);
+        let timeout = Duration::from_secs(5);
         let effect = match spec {
             ConnSpec::Tcp { port } => Tcp { port }.connect_with_timeout(&self, timeout).await,
             ConnSpec::Udp { port } => Udp { port }.connect_with_timeout(&self, timeout).await,
